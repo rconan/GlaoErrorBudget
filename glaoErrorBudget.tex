@@ -1,0 +1,120 @@
+\documentclass{gmto}
+
+\DocID{GMT-XXX-\#\#\#\#}
+\DocVersion{1.0}
+\DocStatus{Draft}
+
+\addbibresource{gmt.bib}
+
+\title{GLAO Error Budget}
+%\subtitle{}
+\author{B. Sitarski, R. Conan}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\clearpage
+
+\section*{Signatures}
+\vspace{1cm}
+\subsection*{Author}
+\vspace{1.5cm}
+%\tabulinesep=1em
+\begin{tabu} to \linewidth {X[3,l]X[1,l]}
+  \rule{\linewidth}{.1pt} & \rule{\linewidth}{.1pt} \\
+  Name, title & Date
+\end{tabu}
+\vspace{1.5cm}
+\subsection*{Approvers}
+\vspace{1.5cm}
+%\tabulinesep=1em
+\begin{tabu} to \linewidth {X[3,l]X[1,l]}
+  \rule{\linewidth}{.1pt} & \rule{\linewidth}{.1pt} \\
+  Name, title & Date \\[1cm]
+  \rule{\linewidth}{.1pt} & \rule{\linewidth}{.1pt} \\
+  Name, title & Date
+\end{tabu}
+
+\clearpage
+
+\section*{Revision Log}
+
+\begin{revisions}
+  1.0 & \today & All & None & Initial version & Author \\  
+\end{revisions}
+
+\clearpage
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\clearpage
+
+\section{Purpose}
+\label{sec:purpose}
+
+\section{Introduction}
+\label{sec:introduction}
+
+\section{Error budget}
+\label{sec:error-budget}
+
+\paragraph{Assumptions:}
+\begin{itemize}
+\item dome seeing is the predominant error source
+\end{itemize}
+
+\paragraph{Error budget:}
+\begin{itemize}
+\item fitting error (spatial frequency)
+\item servo-lag (temporal) error (lag \& exposure time)
+\item noise sources
+  \begin{itemize}
+  \item WFS aliasing
+  \item detector noise: photon noise, RON, background, ...
+  \item high level atmosphere (jet stream)
+  \item GMT idiosyncrasies
+    \begin{itemize}
+    \item M1 fabrication shape
+    \item M1 thermal print through
+    \end{itemize}
+  \end{itemize}
+\end{itemize}
+
+\paragraph{Fitting error:}
+
+\begin{itemize}
+\item dome seeing projection onto ASM modes
+  \begin{itemize}
+  \item need ASM modes (from FQP)
+  \item dome seeing OPD maps ($10\times 400$s samples @ 20Hz)
+  \item matching resolution: matching mode spatial sampling to OPD map spatial sampling
+  \end{itemize}
+\item remove N modes from dome seeing (N as a function SH48, default: 100)
+\end{itemize}
+
+Model:
+\begin{eqnarray}
+  \hat\varphi &=& \sum_{i=1}^N b_i B_i = Bb
+\end{eqnarray}
+where
+\begin{eqnarray}
+  b  = B^T\varphi ( =(B^TB)^{-1}B^T \varphi)
+\end{eqnarray}
+Residual
+\begin{eqnarray}
+  \varphi_\varepsilon = \varphi - \hat\varphi
+\end{eqnarray}
+
+\paragraph{Servo-lag error:}
+\begin{itemize}
+\item 100Hz frame rate (compared to 20Hz CFD dome seeing sampling ?!?)
+\item latency 12ms
+\end{itemize}
+
+\printbibliography
+
+\end{document}
