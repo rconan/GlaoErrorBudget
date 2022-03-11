@@ -1,5 +1,5 @@
 use crate::Result;
-use npyz::{npz, NpyFile, WriterBuilder};
+use npyz::{npz, NpyFile};
 use std::{fs::File, io, path::Path};
 
 /// Dome seeing opd map
@@ -59,13 +59,42 @@ impl OPD {
         let mean = self.mean();
         opd.iter().map(|&x| x - mean).map(|x| x * x).sum::<f64>() / opd.len() as f64
     }
+    /// Return the OPD variance on an area specified with a mask
+    pub fn masked_var(&self, mask: &[bool]) -> f64 {
+        let opd: Vec<&f64> = self
+            .data
+            .iter()
+            .zip(mask)
+            .filter(|(_, &m)| m)
+            .map(|(o, _)| o)
+            .collect();
+        let n = opd.len() as f64;
+        let mean = opd.iter().cloned().sum::<f64>() / n;
+        opd.iter().map(|&x| x - mean).map(|x| x * x).sum::<f64>() / n
+    }
     /// Return the OPD standard deviation
     pub fn std(&self) -> f64 {
         self.var().sqrt()
     }
+    /// Return the OPD standard deviation on an area specified with a mask
+    pub fn masked_std(&self, mask: &[bool]) -> f64 {
+        self.masked_var(mask).sqrt()
+    }
     /// Return the OPD root mean square
     pub fn rms(&self) -> f64 {
-        self.no_nan_opd().map(|x| x * x).sum::<f64>().sqrt()
+        let opd: Vec<&f64> = self.no_nan_opd().collect();
+        (opd.iter().map(|&x| x * x).sum::<f64>() / opd.len() as f64).sqrt()
+    }
+    /// Return the OPD root mean square on an area specified with a mask
+    pub fn masked_rms(&self, mask: &[bool]) -> f64 {
+        let opd: Vec<&f64> = self
+            .data
+            .iter()
+            .zip(mask)
+            .filter(|(_, &m)| m)
+            .map(|(o, _)| o)
+            .collect();
+        (opd.iter().map(|&x| x * x).sum::<f64>() / opd.len() as f64).sqrt()
     }
 }
 
@@ -74,9 +103,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn opd() {
+    fn opd_npz() {
         let opd = OPD::from_npz("optvol_optvol_6.000000e+02.npz").unwrap();
         println!("{}/{}", opd.no_nan_opd().count(), 512 * 512);
+        println!("min/max: {:.0}nm/{:.0}nm", 1e9 * opd.min(), 1e9 * opd.max());
         println!("mean: {:.0}nm", 1e9 * opd.mean());
         println!("std: {:.0}nm", 1e9 * opd.std());
     }

@@ -11,7 +11,7 @@ fn asm_opd() {
 
     println!("Assembling the ASM segments ...");
     let now = Instant::now();
-    let asms = (1..=7)
+    let mut asms = (1..=7)
         .map(|sid| {
             let mut asm: ASM = asm::from_bin(sid).unwrap();
             asm.unit_norm();
@@ -23,13 +23,34 @@ fn asm_opd() {
     println!("Projection the opd on the ASM segments ...");
     let opd_map = opd.map();
     let now = Instant::now();
-    let b = asms
-        .par_iter()
-        .map(|asm| asm.project(opd_map).unwrap())
-        .collect::<Vec<_>>();
+    asms.par_iter_mut().for_each(|asm| {
+        asm.project(opd_map).unwrap();
+    });
     println!(" done in {}s", now.elapsed().as_millis());
 
-    let var = b.iter().flatten().map(|x| x * x).sum::<f64>();
+    let vars: Vec<_> = asms
+        .iter()
+        .map(|asm| asm.coefficients().iter().map(|x| x * x).sum::<f64>())
+        .collect();
+    let stds: Vec<_> = asms
+        .iter()
+        .map(|asm| 1e9 * opd.masked_rms(asm.mask()))
+        .collect();
+    println!("Segment WFE STD: {:.0?}nm", stds);
+    println!(
+        "Segment WFE RMS: {:.0?}nm",
+        vars.iter().map(|x| 1e9 * x.sqrt()).collect::<Vec<_>>()
+    );
+    let var = asms
+        .iter()
+        .map(|asm| {
+            asm.coefficients()
+                .iter()
+                .skip(1)
+                .map(|x| x * x)
+                .sum::<f64>()
+        })
+        .sum::<f64>();
     println!(
         "WFE RMS: {:.0}nm/{:.0}nm",
         opd.rms() * 1e9,

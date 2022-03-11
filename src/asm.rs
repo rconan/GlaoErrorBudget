@@ -1,6 +1,6 @@
 use crate::{GlaoError, Result};
 use serde::{Deserialize, Serialize};
-use std::{fs::File, path::Path};
+use std::{fs::File, iter::Once, path::Path};
 
 /// A segment
 ///
@@ -15,6 +15,8 @@ pub struct Segment {
     pub n_mode: usize,
     /// Pupil mask for the segment
     pub mask: Vec<bool>,
+    /// Modal coefficients
+    pub coefficients: Vec<f64>,
 }
 impl Segment {
     /// Creates a new segment
@@ -25,6 +27,7 @@ impl Segment {
             modes,
             n_mode,
             mask,
+            coefficients: Vec::new(),
         }
     }
     /// Normalizes the modes
@@ -33,7 +36,9 @@ impl Segment {
     pub fn unit_norm(&mut self) {
         let n = self.n_point();
         self.modes.chunks_mut(n).for_each(|mode| {
-            let rnum = mode.iter().map(|x| x * x).sum::<f64>().sqrt().recip();
+            let rnum = (mode.iter().map(|x| x * x).sum::<f64>() * n as f64)
+                .sqrt()
+                .recip();
             mode.iter_mut().for_each(|mode| *mode *= rnum);
         });
     }
@@ -50,11 +55,26 @@ impl Segment {
             .map(|(_, o)| *o)
             .collect()
     }
+    /// Replace the `old_data` with the mask with the `new_data`
+    ///
+    /// The old data has the same size than the mask array
+    /// The new data is the size of the masked array
+    pub fn masked_replace(&self, old_data: &mut [f64], new_data: Vec<f64>) {
+        self.mask
+            .iter()
+            .zip(old_data)
+            .filter(|(&m, _)| m)
+            .map(|(_, o)| o)
+            .zip(new_data.into_iter())
+            .for_each(|(old, new)| {
+                *old = new;
+            });
+    }
     /// Projects `opd` on all the modes
-    pub fn project(&self, opd: &[f64]) -> Result<Vec<f64>> {
+    pub fn project(&mut self, opd: &[f64]) -> Result<&mut Self> {
         let n = self.n_point();
         let m: usize = 512 * 512;
-        match opd.len() {
+        self.coefficients = match opd.len() {
             l if l == m => {
                 let masked_opd: Vec<_> = self.masked(opd);
                 Ok(self
@@ -73,6 +93,33 @@ impl Segment {
                 .map(|m| m.iter().zip(opd).fold(0f64, |a, (&x, &y)| a + x * y))
                 .collect()),
             _ => Err(GlaoError::Projection),
+        }?;
+        Ok(self)
+    }
+    /// Computes the shape of the mirror segment
+    ///
+    /// Uses either all the modes or a specified set
+    pub fn shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64> {
+        let n = self.n_point();
+        if let Some(idx) = idx {
+            let modes = idx
+                .clone()
+                .map(|idx| self.modes.chunks(n).nth(idx).unwrap());
+            let coefficients = idx.map(|idx| self.coefficients[idx]);
+            modes
+                .zip(coefficients)
+                .fold(vec![0f64; n], |mut w, (m, c)| {
+                    w.iter_mut().zip(m).for_each(|(w, &m)| *w += m * c);
+                    w
+                })
+        } else {
+            self.modes
+                .chunks(n)
+                .zip(&self.coefficients)
+                .fold(vec![0f64; n], |mut w, (m, c)| {
+                    w.iter_mut().zip(m).for_each(|(w, &m)| *w += m * c);
+                    w
+                })
         }
     }
 }
@@ -103,7 +150,7 @@ impl ASM {
         .to_string()
     }
     /// Projects `opd` on all the modes
-    pub fn project(&self, opd: &[f64]) -> Result<Vec<f64>> {
+    pub fn project(&mut self, opd: &[f64]) -> Result<&mut Self> {
         use ASM::*;
         match self {
             S1(segment) => segment.project(opd),
@@ -113,7 +160,8 @@ impl ASM {
             S5(segment) => segment.project(opd),
             S6(segment) => segment.project(opd),
             S7(segment) => segment.project(opd),
-        }
+        }?;
+        Ok(self)
     }
     /// Returns the number of points within the segment
     pub fn n_point(&self) -> usize {
@@ -126,6 +174,74 @@ impl ASM {
             S5(segment) => segment.n_point(),
             S6(segment) => segment.n_point(),
             S7(segment) => segment.n_point(),
+        }
+    }
+    /// Returns the segment shape
+    pub fn shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64> {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.shape(idx),
+            S2(segment) => segment.shape(idx),
+            S3(segment) => segment.shape(idx),
+            S4(segment) => segment.shape(idx),
+            S5(segment) => segment.shape(idx),
+            S6(segment) => segment.shape(idx),
+            S7(segment) => segment.shape(idx),
+        }
+    }
+    /// Returns the segment modal coefficients
+    pub fn coefficients(&self) -> &[f64] {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.coefficients.as_slice(),
+            S2(segment) => segment.coefficients.as_slice(),
+            S3(segment) => segment.coefficients.as_slice(),
+            S4(segment) => segment.coefficients.as_slice(),
+            S5(segment) => segment.coefficients.as_slice(),
+            S6(segment) => segment.coefficients.as_slice(),
+            S7(segment) => segment.coefficients.as_slice(),
+        }
+    }
+    /// Returns the segment modes
+    pub fn modes(&self) -> &[f64] {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.modes.as_slice(),
+            S2(segment) => segment.modes.as_slice(),
+            S3(segment) => segment.modes.as_slice(),
+            S4(segment) => segment.modes.as_slice(),
+            S5(segment) => segment.modes.as_slice(),
+            S6(segment) => segment.modes.as_slice(),
+            S7(segment) => segment.modes.as_slice(),
+        }
+    }
+    /// Returns the segment mask
+    pub fn mask(&self) -> &[bool] {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.mask.as_slice(),
+            S2(segment) => segment.mask.as_slice(),
+            S3(segment) => segment.mask.as_slice(),
+            S4(segment) => segment.mask.as_slice(),
+            S5(segment) => segment.mask.as_slice(),
+            S6(segment) => segment.mask.as_slice(),
+            S7(segment) => segment.mask.as_slice(),
+        }
+    }
+    /// Replace the `old_data` with the mask with the `new_data`
+    ///
+    /// The old data has the same size than the mask array
+    /// The new data is the size of the masked array
+    pub fn masked_replace(&self, old_data: &mut [f64], new_data: Vec<f64>) {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.masked_replace(old_data, new_data),
+            S2(segment) => segment.masked_replace(old_data, new_data),
+            S3(segment) => segment.masked_replace(old_data, new_data),
+            S4(segment) => segment.masked_replace(old_data, new_data),
+            S5(segment) => segment.masked_replace(old_data, new_data),
+            S6(segment) => segment.masked_replace(old_data, new_data),
+            S7(segment) => segment.masked_replace(old_data, new_data),
         }
     }
     /// Normalizes the modes
@@ -152,6 +268,20 @@ pub fn from_bin(sid: usize) -> Result<ASM> {
     Ok(bincode::deserialize_from(file)?)
 }
 
+pub trait ASMS {
+    fn mirror_shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64>;
+}
+impl ASMS for Vec<ASM> {
+    fn mirror_shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64> {
+        let mut shape = vec![0f64; 512 * 512];
+        for asm in self {
+            let segment_shape = asm.shape(idx.clone());
+            asm.masked_replace(&mut shape, segment_shape);
+        }
+        shape
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,6 +303,7 @@ mod tests {
             modes,
             n_mode,
             mask,
+            ..
         }) = asm
         {
             assert_eq!(n_mode, 500);
@@ -189,6 +320,7 @@ mod tests {
             modes,
             n_mode,
             mask,
+            ..
         }) = asm
         {
             assert_eq!(n_mode, 500);
@@ -203,6 +335,7 @@ mod tests {
             modes,
             n_mode,
             mask,
+            ..
         }) = asm
         {
             assert_eq!(n_mode, 500);
@@ -215,11 +348,8 @@ mod tests {
     fn project() {
         let mut asm: ASM = from_bin(1).unwrap();
         asm.unit_norm();
-        if let ASM::S1(Segment { modes, .. }) = &asm {
-            let b = asm
-                .project(modes.chunks(asm.n_point()).nth(3).unwrap())
-                .unwrap();
-            println!("b: {:?}", &b[..5]);
-        }
+        let modes = asm.modes().chunks(asm.n_point()).nth(3).unwrap().to_vec();
+        asm.project(&modes).unwrap();
+        println!("b: {:?}", &asm.coefficients()[..5]);
     }
 }
