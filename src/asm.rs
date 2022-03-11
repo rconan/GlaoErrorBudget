@@ -1,6 +1,6 @@
 use crate::{GlaoError, Result};
 use serde::{Deserialize, Serialize};
-use std::{fs::File, iter::Once, path::Path};
+use std::{fs::File, path::Path};
 
 /// A segment
 ///
@@ -55,10 +55,10 @@ impl Segment {
             .map(|(_, o)| *o)
             .collect()
     }
-    /// Replace the `old_data` with the mask with the `new_data`
+    /// Replaces the `old_data` within the mask with the `new_data`
     ///
     /// The old data has the same size than the mask array
-    /// The new data is the size of the masked array
+    /// The new data is the size of the masked area
     pub fn masked_replace(&self, old_data: &mut [f64], new_data: Vec<f64>) {
         self.mask
             .iter()
@@ -68,6 +68,21 @@ impl Segment {
             .zip(new_data.into_iter())
             .for_each(|(old, new)| {
                 *old = new;
+            });
+    }
+    /// Substracts `new_data` from `old_data` within the mask
+    ///
+    /// The old data has the same size than the mask array
+    /// The new data is the size of the masked area
+    pub fn masked_sub(&self, old_data: &mut [f64], new_data: Vec<f64>) {
+        self.mask
+            .iter()
+            .zip(old_data)
+            .filter(|(&m, _)| m)
+            .map(|(_, o)| o)
+            .zip(new_data.into_iter())
+            .for_each(|(old, new)| {
+                *old -= new;
             });
     }
     /// Projects `opd` on all the modes
@@ -124,7 +139,7 @@ impl Segment {
     }
 }
 
-/// ASM 7 segments
+/// A single ASM
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ASM {
     S1(Segment),
@@ -244,6 +259,22 @@ impl ASM {
             S7(segment) => segment.masked_replace(old_data, new_data),
         }
     }
+    /// Substracts `new_data` from `old_data` within the mask
+    ///
+    /// The old data has the same size than the mask array
+    /// The new data is the size of the masked area
+    pub fn masked_sub(&self, old_data: &mut [f64], new_data: Vec<f64>) {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.masked_sub(old_data, new_data),
+            S2(segment) => segment.masked_sub(old_data, new_data),
+            S3(segment) => segment.masked_sub(old_data, new_data),
+            S4(segment) => segment.masked_sub(old_data, new_data),
+            S5(segment) => segment.masked_sub(old_data, new_data),
+            S6(segment) => segment.masked_sub(old_data, new_data),
+            S7(segment) => segment.masked_sub(old_data, new_data),
+        }
+    }
     /// Normalizes the modes
     ///
     /// The modes `m` are normalized  such as `|m|=1`
@@ -266,20 +297,6 @@ pub fn from_bin(sid: usize) -> Result<ASM> {
     let path = Path::new("gerpy");
     let file = File::open(path.join(format!("M2S{sid}")).with_extension("bin"))?;
     Ok(bincode::deserialize_from(file)?)
-}
-
-pub trait ASMS {
-    fn mirror_shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64>;
-}
-impl ASMS for Vec<ASM> {
-    fn mirror_shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64> {
-        let mut shape = vec![0f64; 512 * 512];
-        for asm in self {
-            let segment_shape = asm.shape(idx.clone());
-            asm.masked_replace(&mut shape, segment_shape);
-        }
-        shape
-    }
 }
 
 #[cfg(test)]
