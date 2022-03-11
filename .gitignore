@@ -1,0 +1,9 @@
+/target
+Cargo.lock
+*.*~
+*.ipynb*
+*.bin
+*.npz
+gerpy/bincode
+gerpy/gerpy
+gerpy/serde*
