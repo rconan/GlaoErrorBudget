@@ -42,9 +42,7 @@ fn main() -> anyhow::Result<()> {
     let asm_shape = asms.mirror_shape(idx);
     println!("ASM std: {:.0}nm", 1e9 * asm_shape.std());
     // Residual wavefront
-    let mut residuals = opd.clone();
-    // - substracting the mirror shape
-    residuals -= &asms;
+    let residuals = &opd - &asms;
     println!("Residuals std: {:.0}nm", 1e9 * residuals.std());
 
     let size = (512, 512);
