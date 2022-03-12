@@ -6,13 +6,17 @@ use std::{fs::File, io, path::Path};
 ///
 /// The dome seeing is sampled on a 512x512 grid
 /// Values outside the exit pupil are set to NaN
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct OPD {
     data: Vec<f64>,
     max: f64,
     min: f64,
 }
-
+impl Clone for OPD {
+    fn clone(&self) -> Self {
+        OPD::new(self.data.clone())
+    }
+}
 impl OPD {
     /// Creates a new OPD object
     pub fn new(data: Vec<f64>) -> Self {

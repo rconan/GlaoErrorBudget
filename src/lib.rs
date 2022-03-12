@@ -88,16 +88,22 @@ impl ASMS for Vec<ASM> {
     }
 }
 
-impl SubAssign<&Vec<ASM>> for OPD {
-    fn sub_assign(&mut self, rhs: &Vec<ASM>) {
+impl<T> SubAssign<&T> for OPD
+where
+    T: ASMS,
+{
+    fn sub_assign(&mut self, rhs: &T) {
         rhs.mirror_shape_sub(self, Option::<Once<usize>>::None)
     }
 }
 
-impl Sub<&Vec<ASM>> for &OPD {
+impl<T> Sub<&T> for &OPD
+where
+    T: ASMS,
+{
     type Output = OPD;
 
-    fn sub(self, rhs: &Vec<ASM>) -> Self::Output {
+    fn sub(self, rhs: &T) -> Self::Output {
         let mut opd = self.clone();
         opd -= rhs;
         opd
