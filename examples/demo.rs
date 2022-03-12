@@ -39,11 +39,12 @@ fn main() -> anyhow::Result<()> {
 
     let idx = Option::<Once<usize>>::None;
     // ASMS figure
-    let asm_shape = asms.mirror_shape(idx.clone());
+    let asm_shape = asms.mirror_shape(idx);
     println!("ASM std: {:.0}nm", 1e9 * asm_shape.std());
-    // residual wavefront
+    // Residual wavefront
     let mut residuals = opd.clone();
-    asms.mirror_shape_sub(&mut residuals, idx);
+    // - substracting the mirror shape
+    residuals -= &asms;
     println!("Residuals std: {:.0}nm", 1e9 * residuals.std());
 
     let size = (512, 512);

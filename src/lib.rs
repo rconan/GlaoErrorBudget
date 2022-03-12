@@ -6,6 +6,7 @@ ASM fitting model and dome seeing OPD data processing
  */
 
 use rayon::prelude::*;
+use std::{iter::Once, ops::SubAssign};
 use thiserror::Error;
 
 pub mod asm;
@@ -81,5 +82,11 @@ impl ASMS for Vec<ASM> {
             .map(|asm| asm.project(opd_map))
             .collect::<Result<Vec<_>>>()?;
         Ok(self)
+    }
+}
+
+impl SubAssign<&Vec<ASM>> for OPD {
+    fn sub_assign(&mut self, rhs: &Vec<ASM>) {
+        rhs.mirror_shape_sub(self, Option::<Once<usize>>::None)
     }
 }
