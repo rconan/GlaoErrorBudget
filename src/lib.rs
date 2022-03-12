@@ -34,7 +34,7 @@ pub trait ASMS {
     ///
     /// The shape is sampled on a 512x512 regular grid
     /// Pixel outside the mirror footprint are set to NaN
-    fn mirror_shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64>;
+    fn mirror_shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> OPD;
     /// Substracts the mirror shape from the opd
     ///
     /// The map is sampled on a 512x512 regular grid
@@ -42,13 +42,17 @@ pub trait ASMS {
     fn mirror_shape_sub(&self, opd: &mut OPD, idx: Option<impl Iterator<Item = usize> + Clone>);
 }
 impl ASMS for Vec<ASM> {
-    fn mirror_shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64> {
+    fn mirror_shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> OPD {
         let mut shape = vec![f64::NAN; 512 * 512];
         for asm in self {
             let segment_shape = asm.shape(idx.clone());
             asm.masked_replace(&mut shape, segment_shape);
         }
-        shape
+        OPD {
+            data: shape,
+            max: f64::NAN,
+            min: f64::NAN,
+        }
     }
     fn mirror_shape_sub(&self, opd: &mut OPD, idx: Option<impl Iterator<Item = usize> + Clone>) {
         let opd_map = opd.data.as_mut_slice();

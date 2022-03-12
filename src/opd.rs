@@ -6,6 +6,7 @@ use std::{fs::File, io, path::Path};
 ///
 /// The dome seeing is sampled on a 512x512 grid
 /// Values outside the exit pupil are set to NaN
+#[derive(Debug, Clone)]
 pub struct OPD {
     pub data: Vec<f64>,
     pub max: f64,
@@ -35,6 +36,10 @@ impl OPD {
     /// Returns the opd map
     pub fn map(&self) -> &[f64] {
         self.data.as_slice()
+    }
+    /// Returns the opd map x 10e`-scale`
+    pub fn map_10e(&self, scale: i32) -> Vec<f64> {
+        self.data.iter().map(|x| x * 10_f64.powi(-scale)).collect()
     }
     /// Returns the opd maximum
     pub fn max(&self) -> f64 {

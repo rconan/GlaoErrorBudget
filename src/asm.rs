@@ -124,7 +124,9 @@ impl Segment {
             modes
                 .zip(coefficients)
                 .fold(vec![0f64; n], |mut w, (m, c)| {
-                    w.iter_mut().zip(m).for_each(|(w, &m)| *w += m * c);
+                    w.iter_mut()
+                        .zip(m)
+                        .for_each(|(w, &m)| *w += m * c * n as f64);
                     w
                 })
         } else {
@@ -132,7 +134,9 @@ impl Segment {
                 .chunks(n)
                 .zip(&self.coefficients)
                 .fold(vec![0f64; n], |mut w, (m, c)| {
-                    w.iter_mut().zip(m).for_each(|(w, &m)| *w += m * c);
+                    w.iter_mut()
+                        .zip(m)
+                        .for_each(|(w, &m)| *w += m * c * n as f64);
                     w
                 })
         }
@@ -295,7 +299,9 @@ impl ASM {
 
 pub fn from_bin(sid: usize) -> Result<ASM> {
     let path = Path::new("gerpy");
-    let file = File::open(path.join(format!("M2S{sid}")).with_extension("bin"))?;
+    let filename = path.join(format!("M2S{sid}")).with_extension("bin");
+    println!("Loading {filename:?}");
+    let file = File::open(filename)?;
     Ok(bincode::deserialize_from(file)?)
 }
 

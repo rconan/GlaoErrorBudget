@@ -4,6 +4,7 @@ Cargo.lock
 *.ipynb*
 *.bin
 *.npz
+*.png
 gerpy/bincode
 gerpy/gerpy
 gerpy/serde*
