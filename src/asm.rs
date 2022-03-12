@@ -1,13 +1,39 @@
 use crate::{GlaoError, Result};
 use serde::{Deserialize, Serialize};
+
 use std::{fs::File, path::Path};
 
+/// Karhunen-Loeve modal basis
+#[derive(Serialize, Deserialize, Debug)]
+pub struct KarhunenLoeve {
+    /// Segment modes
+    pub modes: Vec<f64>,
+    /// Number of modes
+    pub n_mode: usize,
+    /// Pupil mask for the segment
+    pub mask: Vec<bool>,
+}
+impl KarhunenLoeve {
+    /// Loads segment Karhunen-Loeve modes
+    ///
+    /// The modes are loaded from [bincode] data files in the `gerpy` directory.
+    /// 500 modes are expected.
+    /// The data files are generated with the `gerpy/export.py` script from `segKLmat.npz`.
+    /// The python data transfer interface is created with the binary `gerpy`.
+    pub fn from_bin(sid: usize) -> Result<Self> {
+        let path = Path::new("gerpy");
+        let filename = path.join(format!("M2S{sid}")).with_extension("bin");
+        println!("Loading {filename:?}");
+        let file = File::open(filename)?;
+        Ok(bincode::deserialize_from(file)?)
+    }
+}
 /// A segment
 ///
 /// A segment consists of `n_mode` Karhunen-Loeve modes concatenated in the `modes` vector.
 /// Each mode is defined on a particular segment and the location of the modes
 /// are set with the 512x512 exit pupil `mask`
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 pub struct Segment {
     /// Segment modes
     pub modes: Vec<f64>,
@@ -17,6 +43,16 @@ pub struct Segment {
     pub mask: Vec<bool>,
     /// Modal coefficients
     pub coefficients: Vec<f64>,
+}
+impl From<KarhunenLoeve> for Segment {
+    fn from(kl: KarhunenLoeve) -> Self {
+        Self {
+            modes: kl.modes,
+            n_mode: kl.n_mode,
+            mask: kl.mask,
+            coefficients: Vec::new(),
+        }
+    }
 }
 impl Segment {
     /// Creates a new segment
@@ -29,18 +65,6 @@ impl Segment {
             mask,
             coefficients: Vec::new(),
         }
-    }
-    /// Normalizes the modes
-    ///
-    /// The modes `m` are normalized  such as `|m|=1`
-    pub fn unit_norm(&mut self) {
-        let n = self.n_point();
-        self.modes.chunks_mut(n).for_each(|mode| {
-            let rnum = (mode.iter().map(|x| x * x).sum::<f64>() * n as f64)
-                .sqrt()
-                .recip();
-            mode.iter_mut().for_each(|mode| *mode *= rnum);
-        });
     }
     /// Returns the number of points within the segment
     pub fn n_point(&self) -> usize {
@@ -57,7 +81,7 @@ impl Segment {
     }
     /// Replaces the `old_data` within the mask with the `new_data`
     ///
-    /// The old data has the same size than the mask array
+    /// The old data has the same size than the mask array.
     /// The new data is the size of the masked area
     pub fn masked_replace(&self, old_data: &mut [f64], new_data: Vec<f64>) {
         self.mask
@@ -72,7 +96,7 @@ impl Segment {
     }
     /// Substracts `new_data` from `old_data` within the mask
     ///
-    /// The old data has the same size than the mask array
+    /// The old data has the same size than the mask array.
     /// The new data is the size of the masked area
     pub fn masked_sub(&self, old_data: &mut [f64], new_data: Vec<f64>) {
         self.mask
@@ -95,8 +119,12 @@ impl Segment {
                 Ok(self
                     .modes
                     .chunks(n)
-                    .map(|m| {
-                        m.iter()
+                    .map(|mode| {
+                        let norm = (mode.iter().map(|x| x * x).sum::<f64>() * n as f64)
+                            .sqrt()
+                            .recip();
+                        norm * mode
+                            .iter()
                             .zip(masked_opd.iter())
                             .fold(0f64, |a, (&x, y)| a + x * y)
                     })
@@ -105,7 +133,12 @@ impl Segment {
             l if l == n => Ok(self
                 .modes
                 .chunks(n)
-                .map(|m| m.iter().zip(opd).fold(0f64, |a, (&x, &y)| a + x * y))
+                .map(|mode| {
+                    let norm = (mode.iter().map(|x| x * x).sum::<f64>() * n as f64)
+                        .sqrt()
+                        .recip();
+                    norm * mode.iter().zip(opd).fold(0f64, |a, (&x, &y)| a + x * y)
+                })
                 .collect()),
             _ => Err(GlaoError::Projection),
         }?;
@@ -113,7 +146,7 @@ impl Segment {
     }
     /// Computes the shape of the mirror segment
     ///
-    /// Uses either all the modes or a specified set
+    /// Uses either all the modes or a specified set in an [Iterator]
     pub fn shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64> {
         let n = self.n_point();
         if let Some(idx) = idx {
@@ -124,9 +157,7 @@ impl Segment {
             modes
                 .zip(coefficients)
                 .fold(vec![0f64; n], |mut w, (m, c)| {
-                    w.iter_mut()
-                        .zip(m)
-                        .for_each(|(w, &m)| *w += m * c * n as f64);
+                    w.iter_mut().zip(m).for_each(|(w, &m)| *w += m * c);
                     w
                 })
         } else {
@@ -134,9 +165,7 @@ impl Segment {
                 .chunks(n)
                 .zip(&self.coefficients)
                 .fold(vec![0f64; n], |mut w, (m, c)| {
-                    w.iter_mut()
-                        .zip(m)
-                        .for_each(|(w, &m)| *w += m * c * n as f64);
+                    w.iter_mut().zip(m).for_each(|(w, &m)| *w += m * c);
                     w
                 })
         }
@@ -144,7 +173,7 @@ impl Segment {
 }
 
 /// A single ASM
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 pub enum ASM {
     S1(Segment),
     S2(Segment),
@@ -167,6 +196,19 @@ impl ASM {
             S7(_) => "M2S7",
         }
         .to_string()
+    }
+    pub fn from_bin(sid: usize) -> Result<Self> {
+        let kl = KarhunenLoeve::from_bin(sid)?;
+        match sid {
+            id if id == 1 => Ok(ASM::S1(kl.into())),
+            id if id == 2 => Ok(ASM::S2(kl.into())),
+            id if id == 3 => Ok(ASM::S3(kl.into())),
+            id if id == 4 => Ok(ASM::S4(kl.into())),
+            id if id == 5 => Ok(ASM::S5(kl.into())),
+            id if id == 6 => Ok(ASM::S6(kl.into())),
+            id if id == 7 => Ok(ASM::S7(kl.into())),
+            _ => Err(GlaoError::Bin2Asm),
+        }
     }
     /// Projects `opd` on all the modes
     pub fn project(&mut self, opd: &[f64]) -> Result<&mut Self> {
@@ -249,8 +291,8 @@ impl ASM {
     }
     /// Replace the `old_data` with the mask with the `new_data`
     ///
-    /// The old data has the same size than the mask array
-    /// The new data is the size of the masked array
+    /// The old data has the same size than the mask array.
+    /// The new data is the size of the masked array.
     pub fn masked_replace(&self, old_data: &mut [f64], new_data: Vec<f64>) {
         use ASM::*;
         match self {
@@ -265,7 +307,7 @@ impl ASM {
     }
     /// Substracts `new_data` from `old_data` within the mask
     ///
-    /// The old data has the same size than the mask array
+    /// The old data has the same size than the mask array.
     /// The new data is the size of the masked area
     pub fn masked_sub(&self, old_data: &mut [f64], new_data: Vec<f64>) {
         use ASM::*;
@@ -279,66 +321,42 @@ impl ASM {
             S7(segment) => segment.masked_sub(old_data, new_data),
         }
     }
-    /// Normalizes the modes
-    ///
-    /// The modes `m` are normalized  such as `|m|=1`
-    pub fn unit_norm(&mut self) -> &mut Self {
-        use ASM::*;
-        match self {
-            S1(segment) => segment.unit_norm(),
-            S2(segment) => segment.unit_norm(),
-            S3(segment) => segment.unit_norm(),
-            S4(segment) => segment.unit_norm(),
-            S5(segment) => segment.unit_norm(),
-            S6(segment) => segment.unit_norm(),
-            S7(segment) => segment.unit_norm(),
-        }
-        self
-    }
-}
-
-pub fn from_bin(sid: usize) -> Result<ASM> {
-    let path = Path::new("gerpy");
-    let filename = path.join(format!("M2S{sid}")).with_extension("bin");
-    println!("Loading {filename:?}");
-    let file = File::open(filename)?;
-    Ok(bincode::deserialize_from(file)?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
 
     #[test]
-    fn asm2bin() {
-        let segment = Segment::new(3, vec![1f64, 2., 3.], vec![true; 6]);
-        let asm = ASM::S1(segment);
-        let file = File::create("test.bin").unwrap();
-        bincode::serialize_into(file, &asm).unwrap();
+    fn kl_from_bin() {
+        let kl = KarhunenLoeve::from_bin(1).unwrap();
+        assert_eq!(kl.n_mode, 500);
+        assert_eq!(kl.modes.len(), 500 * 21382);
+        assert_eq!(kl.mask.len(), 512 * 512);
     }
 
-    #[test]
-    fn py2rs() {
-        let file = File::open("pytest.bin").unwrap();
-        let asm: ASM = bincode::deserialize_from(file).unwrap();
-        if let ASM::S1(Segment {
-            modes,
-            n_mode,
-            mask,
-            ..
-        }) = asm
-        {
-            assert_eq!(n_mode, 500);
-            assert_eq!(modes.len(), 500 * 21382);
-            assert_eq!(mask.len(), 512 * 512);
-            println!("{:?}", &modes[..10]);
+    /*
+        #[test]
+        fn py2rs() {
+            let file = File::open("pytest.bin").unwrap();
+            let asm: ASM = bincode::deserialize_from(file).unwrap();
+            if let ASM::S1(Segment {
+                modes,
+                n_mode,
+                mask,
+                ..
+            }) = asm
+            {
+                assert_eq!(n_mode, 500);
+                assert_eq!(modes.len(), 500 * 21382);
+                assert_eq!(mask.len(), 512 * 512);
+                println!("{:?}", &modes[..10]);
+            }
         }
-    }
-
+    */
     #[test]
     fn s1_from_bin() {
-        let asm: ASM = from_bin(1).unwrap();
+        let asm = ASM::from_bin(1).unwrap();
         if let ASM::S1(Segment {
             modes,
             n_mode,
@@ -353,7 +371,7 @@ mod tests {
     }
     #[test]
     fn s7_from_bin() {
-        let asm: ASM = from_bin(7).unwrap();
+        let asm = ASM::from_bin(7).unwrap();
         if let ASM::S1(Segment {
             modes,
             n_mode,
@@ -369,8 +387,7 @@ mod tests {
 
     #[test]
     fn project() {
-        let mut asm: ASM = from_bin(1).unwrap();
-        asm.unit_norm();
+        let mut asm = ASM::from_bin(1).unwrap();
         let modes = asm.modes().chunks(asm.n_point()).nth(3).unwrap().to_vec();
         asm.project(&modes).unwrap();
         println!("b: {:?}", &asm.coefficients()[..5]);

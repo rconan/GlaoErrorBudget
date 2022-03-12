@@ -8,12 +8,20 @@ use std::{fs::File, io, path::Path};
 /// Values outside the exit pupil are set to NaN
 #[derive(Debug, Clone)]
 pub struct OPD {
-    pub data: Vec<f64>,
-    pub max: f64,
-    pub min: f64,
+    data: Vec<f64>,
+    max: f64,
+    min: f64,
 }
 
 impl OPD {
+    /// Creates a new OPD object
+    pub fn new(data: Vec<f64>) -> Self {
+        Self {
+            data,
+            max: f64::INFINITY,
+            min: f64::NEG_INFINITY,
+        }
+    }
     /// Reads a CFD dome seeing OPD map
     pub fn from_npz<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = io::BufReader::new(File::open(path)?);
@@ -33,9 +41,13 @@ impl OPD {
 
         Ok(Self { data, max, min })
     }
-    /// Returns the opd map
+    /// Returns a reference to the opd map
     pub fn map(&self) -> &[f64] {
         self.data.as_slice()
+    }
+    /// Returns a mutable reference to the opd map
+    pub fn mut_map(&mut self) -> &mut [f64] {
+        self.data.as_mut_slice()
     }
     /// Returns the opd map x 10e`-scale`
     pub fn map_10e(&self, scale: i32) -> Vec<f64> {

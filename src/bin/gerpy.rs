@@ -1,4 +1,4 @@
-use glao_error_budget::{Segment, ASM};
+use glao_error_budget::KarhunenLoeve;
 use serde_generate::SourceInstaller;
 use serde_reflection::{Tracer, TracerConfig};
 use std::path::Path;
@@ -8,10 +8,10 @@ fn main() {
     let mut tracer = Tracer::new(TracerConfig::default());
 
     // Trace the desired top-level type(s).
-    tracer.trace_simple_type::<ASM>().unwrap();
+    tracer.trace_simple_type::<KarhunenLoeve>().unwrap();
 
     // Also trace each enum type separately to fix any `MissingVariants` error.
-    tracer.trace_simple_type::<Segment>().unwrap();
+    //tracer.trace_simple_type::<Segment>().unwrap();
 
     // Obtain the registry of Serde formats and serialize it in YAML (for instance).
     let registry = tracer.registry().unwrap();

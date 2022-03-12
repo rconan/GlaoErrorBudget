@@ -1,4 +1,4 @@
-use glao_error_budget::{asm, ASM, OPD};
+use glao_error_budget::{ASM, ASMS, OPD};
 use rayon::prelude::*;
 use std::time::Instant;
 
@@ -11,13 +11,7 @@ fn asm_opd() {
 
     println!("Assembling the ASM segments ...");
     let now = Instant::now();
-    let mut asms = (1..=7)
-        .map(|sid| {
-            let mut asm: ASM = asm::from_bin(sid).unwrap();
-            asm.unit_norm();
-            asm
-        })
-        .collect::<Vec<_>>();
+    let mut asms: Vec<ASM> = ASMS::from_bins().unwrap();
     println!(" done in {}s", now.elapsed().as_secs());
 
     println!("Projection the opd on the ASM segments ...");

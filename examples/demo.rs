@@ -1,34 +1,24 @@
-use glao_error_budget::{asm, Result, ASM, ASMS, OPD};
-use rayon::prelude::*;
+use glao_error_budget::{ASM, ASMS, OPD};
 use std::{iter::Once, time::Instant};
 
 fn main() -> anyhow::Result<()> {
-    // loading the OPD
+    // Loading the OPD
     let opd = OPD::from_npz("optvol_optvol_6.000000e+02.npz")?;
     println!("{}/{}", opd.no_nan_opd().count(), 512 * 512);
     println!("OPD mean: {:.0}nm", 1e9 * opd.mean());
     println!("OPD std: {:.0}nm", 1e9 * opd.std());
 
-    // collecting the 7 modal basis
+    // Collecting the 7 modal basis
     println!("Assembling the ASM segments ...");
     let now = Instant::now();
-    let mut asms = (1..=7)
-        .map(|sid| {
-            let mut asm: ASM = asm::from_bin(sid).unwrap();
-            asm.unit_norm();
-            asm
-        })
-        .collect::<Vec<_>>();
+    let mut asms: Vec<ASM> = ASMS::from_bins()?;
     println!(" done in {}s", now.elapsed().as_secs());
 
     // OPD projection
-    println!("Projection the opd on the ASM segments ...");
-    let opd_map = opd.map();
+    println!("Projecting the opd on the ASM segments ...");
     let now = Instant::now();
-    asms.par_iter_mut().for_each(|asm| {
-        asm.project(opd_map).unwrap();
-    });
-    println!(" done in {}s", now.elapsed().as_millis());
+    asms.project(&opd)?;
+    println!(" done in {}ms", now.elapsed().as_millis());
 
     // Segment WFE
     // - from the modal coefficients
