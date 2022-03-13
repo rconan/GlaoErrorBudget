@@ -74,6 +74,16 @@ impl ASMS for Vec<ASM> {
     }
     fn mirror_shape_sub(&self, opd: &mut OPD, idx: Option<impl Iterator<Item = usize> + Clone>) {
         let opd_map = opd.mut_map();
+        let mask = self.iter().fold(vec![false; 512 * 512], |mut a, asm| {
+            a.iter_mut()
+                .zip(asm.mask())
+                .for_each(|(a, m)| *a = *a || *m);
+            a
+        });
+        mask.into_iter()
+            .zip(opd_map.iter_mut())
+            .filter(|(m, _)| !*m)
+            .for_each(|(_, o)| *o = f64::NAN);
         for asm in self {
             let segment_shape = asm.shape(idx.clone());
             asm.masked_sub(opd_map, segment_shape);

@@ -1,4 +1,4 @@
-use glao_error_budget::KarhunenLoeve;
+use glao_error_budget::asm::KarhunenLoeve;
 use serde_generate::SourceInstaller;
 use serde_reflection::{Tracer, TracerConfig};
 use std::path::Path;
