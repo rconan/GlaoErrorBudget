@@ -14,7 +14,7 @@ use thiserror::Error;
 
 pub mod asm;
 #[doc(inline)]
-pub use asm::{KarhunenLoeve, Segment, ASM};
+pub use asm::ASM;
 mod opd;
 pub use opd::OPD;
 
