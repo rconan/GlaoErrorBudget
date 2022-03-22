@@ -36,6 +36,30 @@ fn main() -> anyhow::Result<()> {
         "Segment WFE RMS: {:.0?}nm",
         vars.iter().map(|x| 1e9 * x.sqrt()).collect::<Vec<_>>()
     );
+    println!(
+        "Segment Residual WFE RMS: {:.0?}nm",
+        vars.iter()
+            .zip(&stds)
+            .map(|(x, y)| (y * y - x * 1e18).abs().sqrt())
+            .collect::<Vec<_>>()
+    );
+    let n_points: Vec<_> = asms.iter().map(|asm| asm.n_point()).collect();
+    let nn_points: usize = n_points.iter().sum();
+    let c: Vec<_> = n_points
+        .into_iter()
+        .map(|x| x as f64 / nn_points as f64)
+        .collect();
+    println!(
+        "Residual WFE RMS: {:.0?}nm",
+        (vars
+            .iter()
+            .zip(&stds)
+            .map(|(x, y)| (y * y - x * 1e18).abs())
+            .zip(&c)
+            .map(|(x, c)| x * c)
+            .sum::<f64>())
+        .sqrt()
+    );
 
     let idx = Option::<Once<usize>>::None;
     // ASMS figure

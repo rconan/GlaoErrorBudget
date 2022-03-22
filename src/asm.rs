@@ -70,6 +70,10 @@ impl Segment {
     pub fn n_point(&self) -> usize {
         self.modes.len() / self.n_mode
     }
+    /// Returns the number of points within the mask
+    pub fn n_in_mask(&self) -> usize {
+        self.mask.iter().filter_map(|m| m.then(|| 1)).sum()
+    }
     /// Applies the mask
     pub fn masked(&self, data: &[f64]) -> Vec<f64> {
         self.mask
