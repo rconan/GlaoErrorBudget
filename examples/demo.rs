@@ -45,6 +45,16 @@ fn main() -> anyhow::Result<()> {
     let residuals = &opd - &asms;
     println!("Residuals std: {:.0}nm", 1e9 * residuals.std());
 
+    let stds: Vec<_> = asms
+        .iter()
+        .map(|asm| 1e9 * residuals.masked_rms(asm.mask()))
+        .collect();
+    println!("Segment residuals STD: {:.0?}nm", stds);
+    println!(
+        "Segment residuals RMSS: {:.0?}nm",
+        (stds.iter().map(|x| x * x).sum::<f64>() / 7f64).sqrt()
+    );
+
     let size = (512, 512);
     let _: complot::Heatmap = (
         (opd.map_10e(-6).as_slice(), size),
