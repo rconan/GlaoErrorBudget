@@ -1,35 +1,46 @@
 use glao_error_budget::{OpdRecord, ASM, ASMS, OPD};
+use parse_monitors::cfd;
+use rayon::prelude::*;
 use std::fs::File;
 
 fn main() -> anyhow::Result<()> {
     println!("Assembling the ASM segments ...");
-    let mut asms: Vec<ASM> = ASMS::from_bins()?;
+    let asms: Vec<ASM> = ASMS::from_bins()?;
 
-    let files = vec!["optvol_optvol_6.000000e+02.npz"];
+    for cfd_case in cfd::Baseline::<2021>::default().into_iter() {
+        println!("CFD case: {cfd_case}");
+        let files: Vec<_> = cfd::CfdDataFile::<2021>::OpticalPathDifference
+            .glob(cfd_case)?
+            .collect();
 
-    let records = files
-        .into_iter()
-        .map(|file| {
-            let mut opd = OPD::from_npz(file)?;
-            opd.mask_with(&asms.mask()).zero_mean();
-            asms.project(&opd)?;
-            Ok(OpdRecord {
-                file: file.into(),
-                var: opd.var(),
-                segment_sum_square: asms.iter().map(|asm| opd.masked_ss(asm.mask())).collect(),
-                modal_coefficients: asms
-                    .iter()
-                    .flat_map(|asm| asm.coefficients())
-                    .cloned()
-                    .collect(),
-                ratios: asms.area_ratios(),
+        let records = files
+            .into_par_iter()
+            .map(|may_be_file| {
+                let file = may_be_file.unwrap();
+                let filename = file
+                    .file_name()
+                    .map(|x| x.to_str().unwrap())
+                    .unwrap()
+                    .into();
+                let mut opd = OPD::from_npz(file)?;
+                opd.mask_with(&asms.mask()).zero_mean();
+                let modal_coefficients = asms.project_out(&opd);
+                Ok(OpdRecord {
+                    file: filename,
+                    var: opd.var(),
+                    segment_sum_square: asms.iter().map(|asm| opd.masked_ss(asm.mask())).collect(),
+                    modal_coefficients,
+                    ratios: asms.area_ratios(),
+                })
             })
-        })
-        .collect::<anyhow::Result<Vec<OpdRecord>>>()?;
+            .collect::<anyhow::Result<Vec<OpdRecord>>>()?;
 
-    let record_file = File::create("domeseeing_kl.bin")?;
-    bincode::serialize_into(record_file, &records)?;
-
+        let path = cfd::Baseline::<2021>::path()
+            .join(cfd_case.to_string())
+            .join("domeseeing_kl.bin");
+        let record_file = File::create(path)?;
+        bincode::serialize_into(record_file, &records)?;
+    }
     Ok(())
 }
 

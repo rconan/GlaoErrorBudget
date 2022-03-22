@@ -3,7 +3,8 @@ use std::{iter::Once, time::Instant};
 
 fn main() -> anyhow::Result<()> {
     // Loading the OPD
-    let mut opd = OPD::from_npz("optvol_optvol_6.000000e+02.npz")?;
+    let mut opd =
+        OPD::from_npz("/fsx/CASES/zen30az000_CD12/optvol/optvol_optvol_6.000000e+02.npz")?;
     println!("{}/{}", opd.no_nan_opd().count(), 512 * 512);
     println!("OPD mean: {:.0}nm", 1e9 * opd.mean());
     println!("OPD std: {:.0}nm", 1e9 * opd.std());

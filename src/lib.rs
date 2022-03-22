@@ -74,6 +74,7 @@ pub trait ASMS {
     fn mirror_shape_sub(&self, opd: &mut OPD, idx: Option<impl Iterator<Item = usize> + Clone>);
     /// Projects `opd` on all the modes
     fn project(&mut self, opd: &OPD) -> Result<&mut Self>;
+    fn project_out(&self, opd: &OPD) -> Vec<f64>;
     /// Segment area to exit pupil area ratios
     fn area_ratios(&self) -> Vec<f64>;
 }
@@ -118,6 +119,12 @@ impl ASMS for Vec<ASM> {
             .map(|asm| asm.project(opd_map))
             .collect::<Result<Vec<_>>>()?;
         Ok(self)
+    }
+    fn project_out(&self, opd: &OPD) -> Vec<f64> {
+        let opd_map = opd.map();
+        self.par_iter()
+            .flat_map(|asm| asm.project_out(opd_map).unwrap())
+            .collect::<Vec<_>>()
     }
     fn area_ratios(&self) -> Vec<f64> {
         let n_points: Vec<_> = self.iter().map(|asm| asm.n_point()).collect();

@@ -148,6 +148,39 @@ impl Segment {
         }?;
         Ok(self)
     }
+    pub fn project_out(&self, opd: &[f64]) -> Result<Vec<f64>> {
+        let n = self.n_point();
+        let m: usize = 512 * 512;
+        match opd.len() {
+            l if l == m => {
+                let masked_opd: Vec<_> = self.masked(opd);
+                Ok(self
+                    .modes
+                    .chunks(n)
+                    .map(|mode| {
+                        let norm = (mode.iter().map(|x| x * x).sum::<f64>() * n as f64)
+                            .sqrt()
+                            .recip();
+                        norm * mode
+                            .iter()
+                            .zip(masked_opd.iter())
+                            .fold(0f64, |a, (&x, y)| a + x * y)
+                    })
+                    .collect())
+            }
+            l if l == n => Ok(self
+                .modes
+                .chunks(n)
+                .map(|mode| {
+                    let norm = (mode.iter().map(|x| x * x).sum::<f64>() * n as f64)
+                        .sqrt()
+                        .recip();
+                    norm * mode.iter().zip(opd).fold(0f64, |a, (&x, &y)| a + x * y)
+                })
+                .collect()),
+            _ => Err(GlaoError::Projection),
+        }
+    }
     /// Computes the shape of the mirror segment
     ///
     /// Uses either all the modes or a specified set in an [Iterator]
@@ -227,6 +260,18 @@ impl ASM {
             S7(segment) => segment.project(opd),
         }?;
         Ok(self)
+    }
+    pub fn project_out(&self, opd: &[f64]) -> Result<Vec<f64>> {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.project_out(opd),
+            S2(segment) => segment.project_out(opd),
+            S3(segment) => segment.project_out(opd),
+            S4(segment) => segment.project_out(opd),
+            S5(segment) => segment.project_out(opd),
+            S6(segment) => segment.project_out(opd),
+            S7(segment) => segment.project_out(opd),
+        }
     }
     /// Returns the number of points within the segment
     pub fn n_point(&self) -> usize {
