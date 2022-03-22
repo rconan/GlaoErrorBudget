@@ -1,5 +1,7 @@
 \documentclass{gmto}
 
+\usepackage{amsmath}
+
 \DocID{GMT-XXX-\#\#\#\#}
 \DocVersion{1.0}
 \DocStatus{Draft}
@@ -84,7 +86,8 @@
   \end{itemize}
 \end{itemize}
 
-\paragraph{Fitting error:}
+\subsection{Fitting error:}
+\label{sec:fitting}
 
 \begin{itemize}
 \item dome seeing projection onto ASM modes
@@ -104,16 +107,82 @@ where
 \begin{eqnarray}
   b  = B^T\varphi ( =(B^TB)^{-1}B^T \varphi)
 \end{eqnarray}
+For orthonormal basis $B$ i.e. $B^TB=I$:
+\begin{eqnarray}
+  \sigma^2_\varphi = \sum_{i=1}^N b^2_i
+\end{eqnarray}
 Residual
 \begin{eqnarray}
   \varphi_\varepsilon = \varphi - \hat\varphi
 \end{eqnarray}
 
-\paragraph{Servo-lag error:}
+%Exit pupil wavefront error as a function of segment wavefront error.
+Assuming that the wavefront $\varphi$ is zero mean i.e. $\iint_P \varphi=0$, the
+variance of the wavefront $\sigma_\varphi^2$ in the exit pupil $P$ is given by
+\begin{equation}
+  \label{eq:1}
+  \sigma_\varphi^2 = {1 \over A} \iint_P \varphi^2(\vec r) {\rm d}^2\vec r
+\end{equation}
+where $A$ is the area of the exit pupil $P$.
+The wavefront is the sum of 7 non-overlapping wavefronts $P_i\varphi$ on the 7
+segments of the pupil leading to
+\begin{eqnarray}
+  \label{eq:2}
+  \sigma_\varphi^2 &=& {1 \over A} \iint_P \sum_{i=1}^7 P_i\varphi^2(\vec r) {\rm
+                       d}^2\vec r   \\
+                   &=& {1 \over A} \sum_{i=1}^7 \iint_{P_i} \varphi^2(\vec r) {\rm
+                       d}^2\vec r   
+\end{eqnarray}
+where $P_i$ is the portion of the exit pupil for a segment.
+Noting that the normalized squared sum of the wavefront on a segment is given by
+\begin{equation}
+  \label{eq:3}
+  \eta_{\varphi_i}^2 = {1 \over A_i} \iint_{P_i} \varphi^2(\vec r) {\rm d}^2\vec r,
+\end{equation}
+Eq.~(\ref{eq:2}) is rewritten
+\begin{equation}
+  \label{eq:4}
+  \sigma_\varphi^2 = {1 \over A} \sum_{i=1}^7 A_i  \eta_{\varphi_i}^2 = \sum_{i=1}^7 \rho_i  \eta_{\varphi_i}^2,    
+\end{equation}
+where $\rho_i=A_i/A$.
+
+The residual wavefront on a segment is given by
+\begin{equation}
+  \label{eq:5}
+  \tilde\varphi_i = P_i\varphi - \hat\varphi_i  
+\end{equation}
+where
+\begin{equation}
+  \label{eq:6}
+  \hat\varphi_i = B_ib_i
+\end{equation}
+and
+\begin{equation}
+  \label{eq:7}
+  b_i = B_i^T\varphi_i.
+\end{equation}
+
+The normalized squared sum of the residual wavefront on a segment is given by
+\begin{equation}
+  \label{eq:8}
+  \eta_{\tilde\varphi_i}^2 = \eta_{\varphi_i}^2 - \sum_{j=1}^N b_{ij}^2,  
+\end{equation}
+and according to Eq.~(\ref{eq:4}), the variance of the residual wavefront in the
+exit pupil is written:
+\begin{equation}
+  \label{eq:9}
+  \sigma_{\tilde\varphi}^2 = \sum_{i=1}^7 \rho_i  \eta_{\tilde\varphi_i}^2.    
+\end{equation}
+
+\subsection{Servo-lag error:}
+\label{sec:serv-lag}
+
 \begin{itemize}
 \item 100Hz frame rate (compared to 20Hz CFD dome seeing sampling ?!?)
 \item latency 12ms
 \end{itemize}
+
+
 
 \printbibliography
 
