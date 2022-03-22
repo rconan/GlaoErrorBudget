@@ -3,7 +3,7 @@ use std::{iter::Once, time::Instant};
 
 fn main() -> anyhow::Result<()> {
     // Loading the OPD
-    let opd = OPD::from_npz("optvol_optvol_6.000000e+02.npz")?;
+    let mut opd = OPD::from_npz("optvol_optvol_6.000000e+02.npz")?;
     println!("{}/{}", opd.no_nan_opd().count(), 512 * 512);
     println!("OPD mean: {:.0}nm", 1e9 * opd.mean());
     println!("OPD std: {:.0}nm", 1e9 * opd.std());
@@ -13,6 +13,9 @@ fn main() -> anyhow::Result<()> {
     let now = Instant::now();
     let mut asms: Vec<ASM> = ASMS::from_bins()?;
     println!(" done in {}s", now.elapsed().as_secs());
+
+    opd.mask_with(&asms.mask()).zero_mean();
+    println!("OPD std: {:.0}nm", 1e9 * opd.std());
 
     // OPD projection
     println!("Projecting the opd on the ASM segments ...");
@@ -27,33 +30,44 @@ fn main() -> anyhow::Result<()> {
         .map(|asm| asm.coefficients().iter().map(|x| x * x).sum::<f64>())
         .collect();
     // - from the wavefront
-    let stds: Vec<_> = asms
+    let rsss: Vec<_> = asms
         .iter()
-        .map(|asm| 1e9 * opd.masked_rms(asm.mask()))
+        .map(|asm| 1e9 * opd.masked_rss(asm.mask()))
         .collect();
-    println!("Segment WFE STD: {:.0?}nm", stds);
+    println!("Segment WFE RSS: {:.0?}nm", rsss);
     println!(
-        "Segment WFE RMS: {:.0?}nm",
+        "Segment b squared sum: {:.0?}nm",
         vars.iter().map(|x| 1e9 * x.sqrt()).collect::<Vec<_>>()
     );
+    let c: Vec<_> = {
+        let n_points: Vec<_> = asms.iter().map(|asm| asm.n_point()).collect();
+        let nn_points: usize = n_points.iter().sum();
+        n_points
+            .into_iter()
+            .map(|x| x as f64 / nn_points as f64)
+            .collect()
+    };
+    println!(
+        "OPD std: {:.0}nm",
+        rsss.iter()
+            .zip(&c)
+            .map(|(r, c)| r * r * c)
+            .sum::<f64>()
+            .sqrt()
+    );
+
     println!(
         "Segment Residual WFE RMS: {:.0?}nm",
         vars.iter()
-            .zip(&stds)
+            .zip(&rsss)
             .map(|(x, y)| (y * y - x * 1e18).abs().sqrt())
             .collect::<Vec<_>>()
     );
-    let n_points: Vec<_> = asms.iter().map(|asm| asm.n_point()).collect();
-    let nn_points: usize = n_points.iter().sum();
-    let c: Vec<_> = n_points
-        .into_iter()
-        .map(|x| x as f64 / nn_points as f64)
-        .collect();
     println!(
         "Residual WFE RMS: {:.0?}nm",
         (vars
             .iter()
-            .zip(&stds)
+            .zip(&rsss)
             .map(|(x, y)| (y * y - x * 1e18).abs())
             .zip(&c)
             .map(|(x, c)| x * c)

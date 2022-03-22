@@ -45,6 +45,25 @@ impl OPD {
 
         Ok(Self { data, max, min })
     }
+    /// Masks the OPD outside the mask by setting the values to NaN
+    pub fn mask_with(&mut self, mask: &[bool]) -> &mut Self {
+        self.data
+            .iter_mut()
+            .zip(mask)
+            .filter(|x| !x.0.is_nan())
+            .filter(|x| !x.1)
+            .for_each(|(o, _)| *o = f64::NAN);
+        self
+    }
+    /// Remove the OPD average from the OPD
+    pub fn zero_mean(&mut self) -> &mut Self {
+        let mean = self.mean();
+        self.data
+            .iter_mut()
+            .filter(|x| !x.is_nan())
+            .for_each(|o| *o -= mean);
+        self
+    }
     /// Returns a reference to the opd map
     pub fn map(&self) -> &[f64] {
         self.data.as_slice()
@@ -92,6 +111,22 @@ impl OPD {
         let n = opd.len() as f64;
         let mean = opd.iter().cloned().sum::<f64>() / n;
         opd.iter().map(|&x| x - mean).map(|x| x * x).sum::<f64>() / n
+    }
+    /// Return the OPD mean sum squared on an area specified with a mask
+    pub fn masked_ss(&self, mask: &[bool]) -> f64 {
+        let opd: Vec<&f64> = self
+            .data
+            .iter()
+            .zip(mask)
+            .filter(|(_, &m)| m)
+            .map(|(o, _)| o)
+            .collect();
+        let n = opd.len() as f64;
+        opd.iter().map(|&x| x * x).sum::<f64>() / n
+    }
+    /// Return the OPD root sum squared on an area specified with a mask
+    pub fn masked_rss(&self, mask: &[bool]) -> f64 {
+        self.masked_ss(mask).sqrt()
     }
     /// Return the OPD standard deviation
     pub fn std(&self) -> f64 {

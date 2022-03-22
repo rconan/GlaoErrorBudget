@@ -6,6 +6,7 @@ ASM fitting model and dome seeing OPD data processing
  */
 
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::{
     iter::Once,
     ops::{Sub, SubAssign},
@@ -35,6 +36,21 @@ pub enum GlaoError {
 }
 pub type Result<T> = std::result::Result<T, GlaoError>;
 
+/// A single OPD data processing result
+#[derive(Serialize, Deserialize)]
+pub struct OpdRecord {
+    /// OPD file name
+    pub file: String,
+    /// OPD variance
+    pub var: f64,
+    /// OPD segment sum square
+    pub segment_sum_square: Vec<f64>,
+    /// OPD Karhunen-Loeve modal coefficients
+    pub modal_coefficients: Vec<f64>,
+    /// segment area to exit pupil area ratios
+    pub ratios: Vec<f64>,
+}
+
 /// 7 segments ASM
 pub trait ASMS {
     /// Loads segment Karhunen-Loeve modes
@@ -44,6 +60,8 @@ pub trait ASMS {
     fn from_bins() -> Result<Self>
     where
         Self: Sized;
+    /// Return a mask for the ASMS
+    fn mask(&self) -> Vec<bool>;
     /// Returns the mirror shape
     ///
     /// The shape is sampled on a 512x512 regular grid
@@ -56,6 +74,8 @@ pub trait ASMS {
     fn mirror_shape_sub(&self, opd: &mut OPD, idx: Option<impl Iterator<Item = usize> + Clone>);
     /// Projects `opd` on all the modes
     fn project(&mut self, opd: &OPD) -> Result<&mut Self>;
+    /// Segment area to exit pupil area ratios
+    fn area_ratios(&self) -> Vec<f64>;
 }
 impl ASMS for Vec<ASM> {
     fn from_bins() -> Result<Self> {
@@ -63,6 +83,14 @@ impl ASMS for Vec<ASM> {
             .into_par_iter()
             .map(|sid| ASM::from_bin(sid))
             .collect()
+    }
+    fn mask(&self) -> Vec<bool> {
+        self.iter().fold(vec![false; 512 * 512], |mut a, asm| {
+            a.iter_mut()
+                .zip(asm.mask())
+                .for_each(|(a, m)| *a = *a || *m);
+            a
+        })
     }
     fn mirror_shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> OPD {
         let mut shape = vec![f64::NAN; 512 * 512];
@@ -74,13 +102,8 @@ impl ASMS for Vec<ASM> {
     }
     fn mirror_shape_sub(&self, opd: &mut OPD, idx: Option<impl Iterator<Item = usize> + Clone>) {
         let opd_map = opd.mut_map();
-        let mask = self.iter().fold(vec![false; 512 * 512], |mut a, asm| {
-            a.iter_mut()
-                .zip(asm.mask())
-                .for_each(|(a, m)| *a = *a || *m);
-            a
-        });
-        mask.into_iter()
+        self.mask()
+            .into_iter()
             .zip(opd_map.iter_mut())
             .filter(|(m, _)| !*m)
             .for_each(|(_, o)| *o = f64::NAN);
@@ -95,6 +118,14 @@ impl ASMS for Vec<ASM> {
             .map(|asm| asm.project(opd_map))
             .collect::<Result<Vec<_>>>()?;
         Ok(self)
+    }
+    fn area_ratios(&self) -> Vec<f64> {
+        let n_points: Vec<_> = self.iter().map(|asm| asm.n_point()).collect();
+        let nn_points: usize = n_points.iter().sum();
+        n_points
+            .into_iter()
+            .map(|x| x as f64 / nn_points as f64)
+            .collect()
     }
 }
 

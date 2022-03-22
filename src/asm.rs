@@ -241,6 +241,19 @@ impl ASM {
             S7(segment) => segment.n_point(),
         }
     }
+    /// Returns the number of points within the mask
+    pub fn n_in_mask(&self) -> usize {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.n_in_mask(),
+            S2(segment) => segment.n_in_mask(),
+            S3(segment) => segment.n_in_mask(),
+            S4(segment) => segment.n_in_mask(),
+            S5(segment) => segment.n_in_mask(),
+            S6(segment) => segment.n_in_mask(),
+            S7(segment) => segment.n_in_mask(),
+        }
+    }
     /// Returns the segment shape
     pub fn shape(&self, idx: Option<impl Iterator<Item = usize> + Clone>) -> Vec<f64> {
         use ASM::*;
