@@ -7,7 +7,7 @@ fn main() -> anyhow::Result<()> {
     println!("Assembling the ASM segments ...");
     let asms: Vec<ASM> = ASMS::from_bins()?;
 
-    for cfd_case in cfd::Baseline::<2021>::default().into_iter() {
+    for cfd_case in cfd::Baseline::<2021>::mount().into_iter() {
         println!("CFD case: {cfd_case}");
         let files: Vec<_> = cfd::CfdDataFile::<2021>::OpticalPathDifference
             .glob(cfd_case)?
@@ -24,7 +24,8 @@ fn main() -> anyhow::Result<()> {
                     .into();
                 let mut opd = OPD::from_npz(file)?;
                 opd.mask_with(&asms.mask()).zero_mean();
-                let modal_coefficients = asms.project_out(&opd);
+                //let modal_coefficients = asms.project_out(&opd);
+                let modal_coefficients = asms.least_square_out(&opd);
                 Ok(OpdRecord {
                     file: filename,
                     var: opd.var(),
@@ -37,7 +38,7 @@ fn main() -> anyhow::Result<()> {
 
         let path = cfd::Baseline::<2021>::path()
             .join(cfd_case.to_string())
-            .join("domeseeing_kl.bin");
+            .join("domeseeing-lstsq_kl.bin");
         let record_file = File::create(path)?;
         bincode::serialize_into(record_file, &records)?;
     }

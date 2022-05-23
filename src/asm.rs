@@ -1,6 +1,6 @@
 use crate::{GlaoError, Result};
+use nalgebra as na;
 use serde::{Deserialize, Serialize};
-
 use std::{fs::File, path::Path};
 
 /// Karhunen-Loeve modal basis
@@ -43,14 +43,26 @@ pub struct Segment {
     pub mask: Vec<bool>,
     /// Modal coefficients
     pub coefficients: Vec<f64>,
+    /// Segment modes pseudo-inverse
+    pub modes_pinv: na::DMatrix<f64>,
 }
 impl From<KarhunenLoeve> for Segment {
     fn from(kl: KarhunenLoeve) -> Self {
+        let modes = na::DMatrix::from_column_slice(
+            kl.modes.len() / kl.n_mode,
+            kl.n_mode,
+            kl.modes.as_slice(),
+        );
+        let modes_pinv = modes
+            .pseudo_inverse(0f64)
+            .map_err(|e| GlaoError::PseudoInverse(e.into()))
+            .expect("pseudo-inverse failed");
         Self {
             modes: kl.modes,
             n_mode: kl.n_mode,
             mask: kl.mask,
             coefficients: Vec::new(),
+            modes_pinv,
         }
     }
 }
@@ -59,11 +71,18 @@ impl Segment {
     ///
     /// The modes `m` are normalized  such as `|m|=1`
     pub fn new(n_mode: usize, modes: Vec<f64>, mask: Vec<bool>) -> Self {
+        let mat_modes =
+            na::DMatrix::from_column_slice(modes.len() / n_mode, n_mode, modes.as_slice());
+        let modes_pinv = mat_modes
+            .pseudo_inverse(0f64)
+            .map_err(|e| GlaoError::PseudoInverse(e.into()))
+            .expect("pseudo-inverse failed");
         Self {
             modes,
             n_mode,
             mask,
             coefficients: Vec::new(),
+            modes_pinv,
         }
     }
     /// Returns the number of points within the segment
@@ -148,6 +167,17 @@ impl Segment {
         }?;
         Ok(self)
     }
+    pub fn least_square(&mut self, opd: &[f64]) -> Result<&mut Self> {
+        let n = self.n_point();
+        let m: usize = 512 * 512;
+        let masked_opd = match opd.len() {
+            l if l == m => Ok(na::DVector::from_column_slice(self.masked(opd).as_slice())),
+            l if l == n => Ok(na::DVector::from_column_slice(opd)),
+            _ => Err(GlaoError::Projection),
+        }?;
+        self.coefficients = (&self.modes_pinv * masked_opd).as_slice().to_vec();
+        Ok(self)
+    }
     pub fn project_out(&self, opd: &[f64]) -> Result<Vec<f64>> {
         let n = self.n_point();
         let m: usize = 512 * 512;
@@ -180,6 +210,17 @@ impl Segment {
                 .collect()),
             _ => Err(GlaoError::Projection),
         }
+    }
+    pub fn least_square_out(&self, opd: &[f64]) -> Result<Vec<f64>> {
+        let n = self.n_point();
+        let m: usize = 512 * 512;
+        let masked_opd = match opd.len() {
+            l if l == m => Ok(na::DVector::from_column_slice(self.masked(opd).as_slice())),
+            l if l == n => Ok(na::DVector::from_column_slice(opd)),
+            _ => Err(GlaoError::Projection),
+        }?;
+        let b = &self.modes_pinv * masked_opd;
+        Ok(b.as_slice().to_vec())
     }
     /// Computes the shape of the mirror segment
     ///
@@ -261,6 +302,19 @@ impl ASM {
         }?;
         Ok(self)
     }
+    pub fn least_square(&mut self, opd: &[f64]) -> Result<&mut Self> {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.least_square(opd),
+            S2(segment) => segment.least_square(opd),
+            S3(segment) => segment.least_square(opd),
+            S4(segment) => segment.least_square(opd),
+            S5(segment) => segment.least_square(opd),
+            S6(segment) => segment.least_square(opd),
+            S7(segment) => segment.least_square(opd),
+        }?;
+        Ok(self)
+    }
     pub fn project_out(&self, opd: &[f64]) -> Result<Vec<f64>> {
         use ASM::*;
         match self {
@@ -271,6 +325,18 @@ impl ASM {
             S5(segment) => segment.project_out(opd),
             S6(segment) => segment.project_out(opd),
             S7(segment) => segment.project_out(opd),
+        }
+    }
+    pub fn least_square_out(&self, opd: &[f64]) -> Result<Vec<f64>> {
+        use ASM::*;
+        match self {
+            S1(segment) => segment.least_square_out(opd),
+            S2(segment) => segment.least_square_out(opd),
+            S3(segment) => segment.least_square_out(opd),
+            S4(segment) => segment.least_square_out(opd),
+            S5(segment) => segment.least_square_out(opd),
+            S6(segment) => segment.least_square_out(opd),
+            S7(segment) => segment.least_square_out(opd),
         }
     }
     /// Returns the number of points within the segment
@@ -453,5 +519,21 @@ mod tests {
         let modes = asm.modes().chunks(asm.n_point()).nth(3).unwrap().to_vec();
         asm.project(&modes).unwrap();
         println!("b: {:?}", &asm.coefficients()[..5]);
+    }
+
+    #[test]
+    fn project_out() {
+        let mut asm = ASM::from_bin(1).unwrap();
+        let modes = asm.modes().chunks(asm.n_point()).nth(3).unwrap().to_vec();
+        let b = asm.project_out(&modes).unwrap();
+        println!("b: {:?}", &b[..5]);
+    }
+
+    #[test]
+    fn least_square_out() {
+        let mut asm = ASM::from_bin(1).unwrap();
+        let modes = asm.modes().chunks(asm.n_point()).nth(3).unwrap().to_vec();
+        let b = asm.least_square_out(&modes).unwrap();
+        println!("b: {:?}", &b[..5]);
     }
 }

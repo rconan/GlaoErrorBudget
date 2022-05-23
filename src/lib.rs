@@ -33,6 +33,8 @@ pub enum GlaoError {
     Zip(#[from] zip::result::ZipError),
     #[error("npyz variable read failed")]
     Npyz(#[from] npyz::DTypeError),
+    #[error("pseudo-inverse failed with {0}")]
+    PseudoInverse(String),
 }
 pub type Result<T> = std::result::Result<T, GlaoError>;
 
@@ -51,6 +53,88 @@ pub struct OpdRecord {
     pub ratios: Vec<f64>,
 }
 
+pub trait OpdStats {
+    fn mean_var(&self) -> f64;
+    fn mean_segment_sum_square(&self) -> Vec<f64>;
+    fn mean_segment_residual_sum_square(&self) -> Vec<f64>;
+    fn mean_std(&self) -> f64 {
+        <Self as OpdStats>::mean_var(self).sqrt()
+    }
+    fn mean_segment_rss(&self) -> Vec<f64> {
+        <Self as OpdStats>::mean_segment_sum_square(self)
+            .into_iter()
+            .map(|x| x.sqrt())
+            .collect()
+    }
+    fn mean_segment_residual_rss(&self) -> Vec<f64> {
+        <Self as OpdStats>::mean_segment_residual_sum_square(self)
+            .into_iter()
+            .map(|x| x.sqrt())
+            .collect()
+    }
+    fn mean_modal_coefs_square(&self) -> Vec<f64>;
+}
+impl OpdStats for Vec<OpdRecord> {
+    fn mean_var(&self) -> f64 {
+        self.iter().map(|record| record.var).sum::<f64>() / self.len() as f64
+    }
+    fn mean_segment_sum_square(&self) -> Vec<f64> {
+        let n = self.len() as f64;
+        self.iter()
+            .map(|record| &record.segment_sum_square)
+            .fold(vec![0f64; 7], |mut a, sss| {
+                a.iter_mut().zip(sss).for_each(|(a, s)| *a += s);
+                a
+            })
+            .into_iter()
+            .map(|x| x / n)
+            .collect()
+    }
+
+    fn mean_modal_coefs_square(&self) -> Vec<f64> {
+        let n = self.len() as f64;
+        let n_mode = 500;
+        self.iter()
+            .map(|record| &record.modal_coefficients)
+            .fold(vec![0f64; 7 * n_mode], |mut a, b| {
+                a.iter_mut().zip(b).for_each(|(a, b)| *a += b * b);
+                a
+            })
+            .into_iter()
+            .map(|x| x / n)
+            .collect()
+    }
+    fn mean_segment_residual_sum_square(&self) -> Vec<f64> {
+        let n = self.len() as f64;
+        let n_mode = 500;
+        self.iter()
+            .map(|record| {
+                record
+                    .modal_coefficients
+                    .chunks(n_mode)
+                    .map(|b| {
+                        let mut b2: Vec<_> = b.iter().map(|b| b * b).collect();
+                        b2.iter_mut().fold(0.0, |a, x| {
+                            *x += a;
+                            *x
+                        });
+                        b2
+                    })
+                    .zip(&record.segment_sum_square)
+                    .flat_map(|(b2, sss)| {
+                        b2.iter().map(|b2| (sss - *b2).abs()).collect::<Vec<f64>>()
+                    })
+                    .collect::<Vec<f64>>()
+            })
+            .fold(vec![0f64; 7 * n_mode], |mut a, sss| {
+                a.iter_mut().zip(sss).for_each(|(a, s)| *a += s);
+                a
+            })
+            .into_iter()
+            .map(|x| x / n)
+            .collect()
+    }
+}
 /// 7 segments ASM
 pub trait ASMS {
     /// Loads segment Karhunen-Loeve modes
@@ -74,7 +158,9 @@ pub trait ASMS {
     fn mirror_shape_sub(&self, opd: &mut OPD, idx: Option<impl Iterator<Item = usize> + Clone>);
     /// Projects `opd` on all the modes
     fn project(&mut self, opd: &OPD) -> Result<&mut Self>;
+    fn least_square(&mut self, opd: &OPD) -> Result<&mut Self>;
     fn project_out(&self, opd: &OPD) -> Vec<f64>;
+    fn least_square_out(&self, opd: &OPD) -> Vec<f64>;
     /// Segment area to exit pupil area ratios
     fn area_ratios(&self) -> Vec<f64>;
 }
@@ -120,10 +206,23 @@ impl ASMS for Vec<ASM> {
             .collect::<Result<Vec<_>>>()?;
         Ok(self)
     }
+    fn least_square(&mut self, opd: &OPD) -> Result<&mut Self> {
+        let opd_map = opd.map();
+        self.par_iter_mut()
+            .map(|asm| asm.least_square(opd_map))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(self)
+    }
     fn project_out(&self, opd: &OPD) -> Vec<f64> {
         let opd_map = opd.map();
         self.par_iter()
             .flat_map(|asm| asm.project_out(opd_map).unwrap())
+            .collect::<Vec<_>>()
+    }
+    fn least_square_out(&self, opd: &OPD) -> Vec<f64> {
+        let opd_map = opd.map();
+        self.par_iter()
+            .flat_map(|asm| asm.least_square_out(opd_map).unwrap())
             .collect::<Vec<_>>()
     }
     fn area_ratios(&self) -> Vec<f64> {
